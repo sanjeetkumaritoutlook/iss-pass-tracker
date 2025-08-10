@@ -38,11 +38,16 @@ for p in passes:
 ```
 
 ## run locally wiith N2YO API key
-python check_passes.py
+python file_name.py
 
 pip install --upgrade iss-pass-tracker
 
 
+python -m iss_pass_tracker --lat 17.385044 --lon 78.486671 --api-key YOUR_N2YO_KEY
+
+python -m iss_pass_tracker --lat 17.385044 --lon 78.486671 --api-key YOUR_N2YO_KEY --n 10 --all
+
+The -m flag tells Python: "Run a module as a script."
 # macOS / Linux
 export N2YO_API_KEY="YOUR_KEY"
 

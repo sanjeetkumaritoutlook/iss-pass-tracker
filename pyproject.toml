@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iss-pass-tracker"  # ✅ This is the name on PyPI (hyphen is fine here)
-version = "0.3.0"
+version = "1.0.0"
 description = "Fetch upcoming ISS passes for a location and helpers to notify users."
 readme = "README.md"
 requires-python = ">=3.9"

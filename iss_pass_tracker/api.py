@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+import os
 import requests
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional
 
-_API_KEY: Optional[str] = None
-BASE_URL = "https://api.n2yo.com/rest/v1/satellite"
+# N2YO API endpoints
+N2YO_BASE = "https://api.n2yo.com/rest/v1/satellite"
+ALL_PASSES_ENDPOINT = N2YO_BASE + "/predictions/{sat_id}/{lat}/{lon}/0/{n}/&apiKey={api_key}"
+VISIBLE_PASSES_ENDPOINT = N2YO_BASE + "/visualpasses/{sat_id}/{lat}/{lon}/0/{n}/&apiKey={api_key}"
 
+# ISS NORAD ID
+ISS_ID = 25544
 
 @dataclass
 class Pass:
     risetime: datetime  # UTC
     duration: int       # seconds
+    mag: Optional[float] = None  # magnitude (only for visible passes)
 
     def local_time(self, tz=None) -> datetime:
         """Return risetime converted to given tz (zoneinfo.ZoneInfo) or local system tz if None."""
@@ -21,67 +27,70 @@ class Pass:
         return self.risetime.astimezone(tz)
 
 
+_api_key: Optional[str] = None
+
 def set_api_key(key: str) -> None:
-    """
-    Set the N2YO API key globally.
-    """
-    global _API_KEY
-    _API_KEY = key
+    """Set the N2YO API key for future requests."""
+    global _api_key
+    _api_key = key
 
 
-def get_passes(
-    lat: float,
-    lon: float,
-    alt: int = 0,
-    n: int = 5,
-    sat_id: int = 25544,
-    timeout: int = 10
-) -> List[Pass]:
-    """
-    Get the next ISS passes over a location using the N2YO API.
+def _get_api_key() -> str:
+    """Get API key from set value or environment variable."""
+    key = _api_key or os.getenv("N2YO_API_KEY")
+    if not key:
+        raise ValueError("No API key provided. Use set_api_key() or set N2YO_API_KEY env variable.")
+    return key
 
-    :param lat: Latitude in decimal degrees.
-    :param lon: Longitude in decimal degrees.
-    :param alt: Altitude of the observer in meters (default 0).
-    :param n: Number of passes to return.
-    :param sat_id: Satellite ID (ISS = 25544 by default).
-    :param timeout: HTTP timeout in seconds.
-    :return: List[Pass]
-    :raises RuntimeError: if API key is not set.
-    """
-    if not _API_KEY:
-        raise RuntimeError(
-            "N2YO API key not set. Call set_api_key() or set N2YO_API_KEY environment variable."
-        )
 
-    url = f"{BASE_URL}/visualpasses/{sat_id}/{lat}/{lon}/{alt}/{n}/0/&apiKey={_API_KEY}"
+def get_passes(lat: float, lon: float, n: int = 5, visible_only: bool = True, timeout: int = 10) -> List[Pass]:
+    """
+    Query N2YO API to return next `n` ISS passes for given coordinates.
+
+    :param lat: Latitude in decimal degrees
+    :param lon: Longitude in decimal degrees
+    :param n: Number of passes to request
+    :param visible_only: Whether to return only visible passes
+    :param timeout: HTTP request timeout in seconds
+    :return: List of Pass objects
+    """
+    api_key = _get_api_key()
+
+    if visible_only:
+        url = VISIBLE_PASSES_ENDPOINT.format(sat_id=ISS_ID, lat=lat, lon=lon, n=n, api_key=api_key)
+    else:
+        url = ALL_PASSES_ENDPOINT.format(sat_id=ISS_ID, lat=lat, lon=lon, n=n, api_key=api_key)
+
     resp = requests.get(url, timeout=timeout)
     resp.raise_for_status()
     data = resp.json()
 
-    passes_data = data.get("passes", [])
-    results: List[Pass] = []
+    items = []
+    for entry in data.get("passes", []):
+        risetime = datetime.fromtimestamp(entry["startUTC"], tz=timezone.utc)
+        duration = int(entry.get("duration", 0))
+        mag = entry.get("mag")
+        items.append(Pass(risetime=risetime, duration=duration, mag=mag))
 
-    for p in passes_data:
-        risetime = datetime.fromtimestamp(p["startUTC"], tz=timezone.utc)
-        duration = int(p.get("duration", 0))
-        results.append(Pass(risetime=risetime, duration=duration))
-
-    return results
+    return items
 
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Fetch next ISS passes for a given location using N2YO API")
+    parser = argparse.ArgumentParser(description="Fetch next ISS passes for a given location using N2YO")
     parser.add_argument("--lat", type=float, required=True)
     parser.add_argument("--lon", type=float, required=True)
-    parser.add_argument("--alt", type=int, default=0, help="Altitude in meters")
-    parser.add_argument("--n", type=int, default=5, help="Number of passes to return")
-    parser.add_argument("--key", type=str, help="N2YO API key (optional if env var set)")
+    parser.add_argument("--n", type=int, default=5)
+    parser.add_argument("--api-key", type=str)
+    parser.add_argument("--all", action="store_true", help="Include all passes, not just visible ones")
     args = parser.parse_args()
 
-    if args.key:
-        set_api_key(args.key)
+    if args.api_key:
+        set_api_key(args.api_key)
 
-    for p in get_passes(args.lat, args.lon, args.alt, args.n):
-        print(f"{p.risetime.isoformat()} UTC — duration {p.duration} seconds")
+    passes = get_passes(args.lat, args.lon, args.n, visible_only=not args.all)
+    if not passes:
+        print("No upcoming ISS passes found.")
+    else:
+        for p in passes:
+            print(f"{p.risetime.isoformat()} duration {p.duration}s mag={p.mag}")
