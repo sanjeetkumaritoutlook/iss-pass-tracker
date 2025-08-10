@@ -3,9 +3,11 @@ from __future__ import annotations
 import requests
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
-OPEN_NOTIFY_URL = "http://api.open-notify.org/iss-pass.json"
+_API_KEY: Optional[str] = None
+BASE_URL = "https://api.n2yo.com/rest/v1/satellite"
+
 
 @dataclass
 class Pass:
@@ -19,38 +21,67 @@ class Pass:
         return self.risetime.astimezone(tz)
 
 
-def get_passes(lat: float, lon: float, n: int = 5, timeout: int = 10) -> List[Pass]:
+def set_api_key(key: str) -> None:
     """
-    Query the Open Notify API to return the next `n` ISS passes for the given coordinates.
+    Set the N2YO API key globally.
+    """
+    global _API_KEY
+    _API_KEY = key
 
-    :param lat: Latitude in decimal degrees (e.g., 17.385044)
-    :param lon: Longitude in decimal degrees (e.g., 78.486671)
-    :param n: Number of passes to request (API supports up to some small limit)
-    :param timeout: HTTP request timeout in seconds
-    :return: List[Pass]
+
+def get_passes(
+    lat: float,
+    lon: float,
+    alt: int = 0,
+    n: int = 5,
+    sat_id: int = 25544,
+    timeout: int = 10
+) -> List[Pass]:
     """
-    params = {"lat": lat, "lon": lon, "n": n}
-    resp = requests.get(OPEN_NOTIFY_URL, params=params, timeout=timeout)
+    Get the next ISS passes over a location using the N2YO API.
+
+    :param lat: Latitude in decimal degrees.
+    :param lon: Longitude in decimal degrees.
+    :param alt: Altitude of the observer in meters (default 0).
+    :param n: Number of passes to return.
+    :param sat_id: Satellite ID (ISS = 25544 by default).
+    :param timeout: HTTP timeout in seconds.
+    :return: List[Pass]
+    :raises RuntimeError: if API key is not set.
+    """
+    if not _API_KEY:
+        raise RuntimeError(
+            "N2YO API key not set. Call set_api_key() or set N2YO_API_KEY environment variable."
+        )
+
+    url = f"{BASE_URL}/visualpasses/{sat_id}/{lat}/{lon}/{alt}/{n}/0/&apiKey={_API_KEY}"
+    resp = requests.get(url, timeout=timeout)
     resp.raise_for_status()
     data = resp.json()
 
-    # The API returns `response` list with objects like {"risetime": 1596564000, "duration": 600}
-    items = []
-    for item in data.get("response", []):
-        risetime = datetime.fromtimestamp(item["risetime"], tz=timezone.utc)
-        duration = int(item.get("duration", 0))
-        items.append(Pass(risetime=risetime, duration=duration))
-    return items
+    passes_data = data.get("passes", [])
+    results: List[Pass] = []
+
+    for p in passes_data:
+        risetime = datetime.fromtimestamp(p["startUTC"], tz=timezone.utc)
+        duration = int(p.get("duration", 0))
+        results.append(Pass(risetime=risetime, duration=duration))
+
+    return results
 
 
 if __name__ == "__main__":
-    # quick demo when run as a script
     import argparse
-    parser = argparse.ArgumentParser(description="Fetch next ISS passes for a given location")
+    parser = argparse.ArgumentParser(description="Fetch next ISS passes for a given location using N2YO API")
     parser.add_argument("--lat", type=float, required=True)
     parser.add_argument("--lon", type=float, required=True)
-    parser.add_argument("--n", type=int, default=5)
+    parser.add_argument("--alt", type=int, default=0, help="Altitude in meters")
+    parser.add_argument("--n", type=int, default=5, help="Number of passes to return")
+    parser.add_argument("--key", type=str, help="N2YO API key (optional if env var set)")
     args = parser.parse_args()
 
-    for p in get_passes(args.lat, args.lon, args.n):
-        print(p.risetime.isoformat(), "duration", p.duration)
+    if args.key:
+        set_api_key(args.key)
+
+    for p in get_passes(args.lat, args.lon, args.alt, args.n):
+        print(f"{p.risetime.isoformat()} UTC — duration {p.duration} seconds")

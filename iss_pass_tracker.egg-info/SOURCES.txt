@@ -3,8 +3,10 @@ README.md
 pyproject.toml
 setup.cfg
 ./iss_pass_tracker/__init__.py
+./iss_pass_tracker/__main__.py
 ./iss_pass_tracker/api.py
 iss_pass_tracker/__init__.py
+iss_pass_tracker/__main__.py
 iss_pass_tracker/api.py
 iss_pass_tracker.egg-info/PKG-INFO
 iss_pass_tracker.egg-info/SOURCES.txt
