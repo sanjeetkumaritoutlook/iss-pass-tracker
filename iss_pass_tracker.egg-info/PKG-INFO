@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: iss-pass-tracker
-Version: 0.1.0
+Version: 0.1.1
 Summary: Fetch upcoming ISS passes for a location and helpers to notify users.
 Author-email: Sanjeet Kumar <sanjeetkumarit@gmail.com>
 License: MIT
