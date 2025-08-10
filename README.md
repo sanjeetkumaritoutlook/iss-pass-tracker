@@ -17,28 +17,43 @@ python -m build
 # twine upload dist/*
 ```
 
-## Quick usage
+## Quick usage in another file after installing it
 ```python
+import argparse
 from iss_pass_tracker import set_api_key, get_passes
 
-# Set your N2YO API key
-set_api_key("YOUR_N2YO_API_KEY")
+parser = argparse.ArgumentParser()
+parser.add_argument("--api-key", required=True)
+args = parser.parse_args()
 
-# Hyderabad coordinates
-latitude = 17.385044
-longitude = 78.486671
-altitude_meters = 0  # Adjust if needed
+# Set the API key for iss_pass_tracker
+set_api_key(args.api_key)
 
-# Get next 5 passes
-passes = get_passes(latitude, longitude, altitude_meters, n=5)
+lat, lon = 17.385044, 78.486671
+passes = get_passes(lat, lon, n=10)
 
-# Print them
-for p in passes:
-    print(f"Pass at {p.local_time()} (local time), duration {p.duration} seconds")
+if not passes:
+    print("No upcoming ISS passes found.")
+else:
+    for p in passes:
+        # local_time() returns datetime in your system timezone
+        print(p.local_time().strftime("%Y-%m-%d %H:%M:%S %Z"), f"for {p.duration} seconds")
+
 ```
 
+Run: 
+python another_file.py --api-key YOUR_N2YO_KEY
+
+output something like:
+
+2025-08-10 20:42:14 IST for 600 seconds
+
+2025-08-11 19:35:09 IST for 645 seconds
+...
+
+
+
 ## run locally wiith N2YO API key
-python file_name.py
 
 pip install --upgrade iss-pass-tracker
 
